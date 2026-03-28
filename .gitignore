@@ -1,0 +1,13 @@
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+ 
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+venv/
+.venv/
+ 
