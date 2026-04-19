@@ -19,6 +19,13 @@ db_name = os.environ.get('MONGO_DATABASE_NAME', 'compliance')
 client = MongoClient(mongo_url)
 db = client[db_name]
 collection = db['rbi_rss_feeds']
+config_collection = db['keyword_config']
+
+def get_keywords():
+    config = config_collection.find_one({"source": "RBI"})
+    if config:
+        return config.get("strong_terms", STRONG_AIF_TERMS_DEFAULT), config.get("context_terms", CONTEXT_REQUIRED_TERMS_DEFAULT)
+    return STRONG_AIF_TERMS_DEFAULT, CONTEXT_REQUIRED_TERMS_DEFAULT
 
 class HTMLStripper(HTMLParser):
     """Strips HTML tags from description fields before keyword matching."""
@@ -41,7 +48,7 @@ def strip_html(raw_html):
         pass
     return s.get_text()
 
-STRONG_AIF_TERMS = [
+STRONG_AIF_TERMS_DEFAULT = [
     "alternative investment fund",
     "alternative investment funds",
     "sebi-registered alternative investment fund",
@@ -69,7 +76,7 @@ STRONG_AIF_TERMS = [
     "investment in alternative investment fund",
 ]
 
-CONTEXT_REQUIRED_TERMS = [
+CONTEXT_REQUIRED_TERMS_DEFAULT = [
     "venture capital",
     "private equity",
     "category i",
@@ -108,6 +115,9 @@ CONTEXT_REQUIRED_TERMS = [
     "fema",
     "foreign exchange management act",
 ]
+
+# Load current keywords (either from DB or defaults)
+STRONG_AIF_TERMS, CONTEXT_REQUIRED_TERMS = get_keywords()
 
 AIF_CONTEXT_REGEX = r'\b(aif(?!i)|aifs|alternative investment fund|alternative investment funds)\b'
 

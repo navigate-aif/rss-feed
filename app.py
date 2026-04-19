@@ -38,6 +38,21 @@ def get_mongo_client():
 
 db = get_mongo_client()
 rss_collection = db['rss_feeds']
+config_collection = db['keyword_config']
+
+# --- Keyword Configuration Logic ---
+def get_keywords(source, default_strong, default_context):
+    config = config_collection.find_one({"source": source})
+    if config:
+        return config.get("strong_terms", default_strong), config.get("context_terms", default_context)
+    return default_strong, default_context
+
+def save_keywords(source, strong_terms, context_terms):
+    config_collection.update_one(
+        {"source": source},
+        {"$set": {"strong_terms": strong_terms, "context_terms": context_terms}},
+        upsert=True
+    )
 
 # --- HTML Parser ---
 class HTMLStripper(HTMLParser):
@@ -56,8 +71,8 @@ def strip_html(raw_html):
     except Exception: pass
     return s.get_text()
 
-# --- Config: RBI ---
-RBI_STRONG_TERMS = [
+# --- Config: RBI (Defaults) ---
+RBI_STRONG_TERMS_DEFAULT = [
     "alternative investment fund", "alternative investment funds", "sebi-registered alternative investment fund",
     "aif registered with sebi", "category i alternative investment fund", "category ii alternative investment fund",
     "category iii alternative investment fund", "investment in aif", "investment in aifs", "exposure to aif",
@@ -68,7 +83,7 @@ RBI_STRONG_TERMS = [
     "investment in alternative investment fund"
 ]
 
-RBI_CONTEXT_REQUIRED = [
+RBI_CONTEXT_REQUIRED_DEFAULT = [
     "venture capital", "private equity", "category i", "category ii", "category iii", "fvci",
     "foreign venture capital investor", "kyc", "ckyc", "aml", "cft", "assets under management",
     "aum", "net asset value", "nav", "private market", "private markets", "investment vehicle",
@@ -79,8 +94,8 @@ RBI_CONTEXT_REQUIRED = [
     "foreign exchange management act"
 ]
 
-# --- Config: SEBI ---
-SEBI_STRONG_TERMS = [
+# --- Config: SEBI (Defaults) ---
+SEBI_STRONG_TERMS_DEFAULT = [
     "alternative investment fund", "alternative investment funds", "aif regulations", "sebi aif regulations",
     "aif framework", "aif guidelines", "aif compliance", "aif policy", "aif amendment", "aif master circular",
     "category i aif", "category ii aif", "category iii aif", "angel fund", "angel funds", "large value fund",
@@ -91,13 +106,17 @@ SEBI_STRONG_TERMS = [
     "placement memorandum", "ppm", "multiples private equity", "multiples alternate asset"
 ]
 
-SEBI_CONTEXT_REQUIRED = [
+SEBI_CONTEXT_REQUIRED_DEFAULT = [
     "venture capital", "private equity", "category i", "category ii", "category iii", "fund", "trust",
     "trusts", "sebi order", "adjudication order", "penalty order", "settlement order", "sebi circular",
     "master circular", "kyc", "ckyc", "aml", "cft", "assets under management", "aum", "net asset value",
     "nav", "private market", "private markets", "investment vehicle", "investment vehicles",
     "regulated entities", "investors"
 ]
+
+# Load current keywords (either from DB or defaults)
+RBI_STRONG_TERMS, RBI_CONTEXT_REQUIRED = get_keywords("RBI", RBI_STRONG_TERMS_DEFAULT, RBI_CONTEXT_REQUIRED_DEFAULT)
+SEBI_STRONG_TERMS, SEBI_CONTEXT_REQUIRED = get_keywords("SEBI", SEBI_STRONG_TERMS_DEFAULT, SEBI_CONTEXT_REQUIRED_DEFAULT)
 
 AIF_REGEX = r'\b(aif(?!i)|aifs|alternative investment fund|alternative investment funds|lvf)\b'
 
@@ -641,7 +660,7 @@ top_button_container = st.container()
 # ═══════════════════════════════════════════════════════════════════
 active_tab = st.radio(
     "Feeds",
-    ["RBI Updates", "SEBI Updates", "General AIF News"],
+    ["RBI Updates", "SEBI Updates", "General AIF News", "Keyword Settings"],
     horizontal=True,
     label_visibility="collapsed",
     key="active_tab"
@@ -859,6 +878,57 @@ elif active_tab == "General AIF News":
             General news results will appear here based on your search query
         </div>
         """, unsafe_allow_html=True)
+
+elif active_tab == "Keyword Settings":
+    st.markdown("### ⚙️ Keyword Configuration")
+    st.markdown("Customize keywords used for filtering AIF-relevant updates from RBI and SEBI.")
+    
+    col_rbi, col_sebi = st.columns(2)
+    
+    with col_rbi:
+        with st.container(border=True):
+            st.markdown("#### RBI Keywords")
+            rbi_strong_str = st.text_area(
+                "Strong AIF Terms (One per line)",
+                value="\n".join(RBI_STRONG_TERMS),
+                height=250,
+                help="Updates matching these terms are automatically marked as High confidence."
+            )
+            rbi_context_str = st.text_area(
+                "Context-Required Terms (One per line)",
+                value="\n".join(RBI_CONTEXT_REQUIRED),
+                height=250,
+                help="Updates matching these terms require 'AIF' context to be marked as relevant."
+            )
+        
+    with col_sebi:
+        with st.container(border=True):
+            st.markdown("#### SEBI Keywords")
+            sebi_strong_str = st.text_area(
+                "Strong AIF Terms (One per line)",
+                value="\n".join(SEBI_STRONG_TERMS),
+                height=250,
+                key="sebi_strong_ta"
+            )
+            sebi_context_str = st.text_area(
+                "Context-Required Terms (One per line)",
+                value="\n".join(SEBI_CONTEXT_REQUIRED),
+                height=250,
+                key="sebi_context_ta"
+        )
+
+    if st.button("Save Keyword Configuration", type="primary"):
+        new_rbi_strong = [s.strip() for s in rbi_strong_str.split("\n") if s.strip()]
+        new_rbi_context = [s.strip() for s in rbi_context_str.split("\n") if s.strip()]
+        new_sebi_strong = [s.strip() for s in sebi_strong_str.split("\n") if s.strip()]
+        new_sebi_context = [s.strip() for s in sebi_context_str.split("\n") if s.strip()]
+        
+        save_keywords("RBI", new_rbi_strong, new_rbi_context)
+        save_keywords("SEBI", new_sebi_strong, new_sebi_context)
+        
+        st.session_state['success_msg'] = "Keyword configuration saved successfully!"
+        st.cache_data.clear() # Clear cache to re-filter with new keywords
+        st.rerun()
 
 # ═══════════════════════════════════════════════════════════════════
 # TOP TOOLBAR RENDER

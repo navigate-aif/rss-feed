@@ -18,11 +18,18 @@ db_name = os.environ.get('MONGO_DATABASE_NAME', 'compliance')
 client = MongoClient(mongo_url)
 db = client[db_name]
 collection = db['sebi_rss_feeds']
+config_collection = db['keyword_config']
+
+def get_keywords():
+    config = config_collection.find_one({"source": "SEBI"})
+    if config:
+        return config.get("strong_terms", STRONG_AIF_TERMS_DEFAULT), config.get("context_terms", CONTEXT_REQUIRED_TERMS_DEFAULT)
+    return STRONG_AIF_TERMS_DEFAULT, CONTEXT_REQUIRED_TERMS_DEFAULT
 
 # --- Configuration: Precision Filtering ---
 
 # These terms are uniquely AIF-related and trigger 100% confidence.
-STRONG_AIF_TERMS = [
+STRONG_AIF_TERMS_DEFAULT = [
     "alternative investment fund",
     "alternative investment funds",
     "aif regulations",
@@ -63,7 +70,7 @@ STRONG_AIF_TERMS = [
 ]
 
 # These terms are relevant ONLY if the update also mentions "AIF" or "Alternative Investment Fund".
-CONTEXT_REQUIRED_TERMS = [
+CONTEXT_REQUIRED_TERMS_DEFAULT = [
     "venture capital",
     "private equity",
     "category i",
@@ -93,6 +100,9 @@ CONTEXT_REQUIRED_TERMS = [
     "regulated entities",
     "investors"
 ]
+
+# Load current keywords (either from DB or defaults)
+STRONG_AIF_TERMS, CONTEXT_REQUIRED_TERMS = get_keywords()
 
 
 COMMON_HEADERS = {
