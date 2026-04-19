@@ -1,13 +1,14 @@
 [theme]
 base="light"
 primaryColor="#0369a1"
-backgroundColor="#ffffff"
+backgroundColor="#F5F3EE"
 secondaryBackgroundColor="#e2e8f0"
 textColor="#0f172a"
 
 [server]
-headless = true
 port = 8080
 address = "0.0.0.0"
-enableCORS = false
-enableXsrfProtection = false
+headless = true
+
+[browser]
+gatherUsageStats = false
